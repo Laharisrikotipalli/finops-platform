@@ -1,0 +1,45 @@
+services:
+  mock-billing-api:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./local/mock-billing:/app
+    command: ["python", "server.py"]
+    ports:
+      - "9091:9091"
+    networks:
+      - finops-net
+
+  mock-kubecost:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./local/mock-kubecost:/app
+    command: ["python", "server.py"]
+    ports:
+      - "9090:9090"
+    depends_on:
+      - mock-billing-api
+    networks:
+      - finops-net
+
+  report-generator:
+    image: alpine:3.20
+    working_dir: /app
+    volumes:
+      - ./scripts:/app
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["apk add --no-cache bash curl python3 >/dev/null && bash generate-report.sh"]
+    environment:
+      KUBECOST_URL: "http://mock-kubecost:9090"
+      WINDOW: "last7days"
+      AGGREGATE: "label:team"
+      OUTPUT_FILE: "/app/team_costs.csv"
+    depends_on:
+      - mock-kubecost
+    networks:
+      - finops-net
+
+networks:
+  finops-net:
+    driver: bridge

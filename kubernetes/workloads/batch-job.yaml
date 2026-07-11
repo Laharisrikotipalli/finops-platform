@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch-job
+  namespace: default
+  labels:
+    app: batch-job
+    team: data
+    environment: production
+    cost-center: "cc-202"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: batch-job
+  template:
+    metadata:
+      labels:
+        app: batch-job
+        team: data
+        environment: production
+        cost-center: "cc-202"
+    spec:
+      nodeSelector:
+        lifecycle: spot
+      tolerations:
+        - key: "spotInstance"
+          operator: "Exists"
+          effect: "PreferNoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: batch-job
+  namespace: default
+  labels:
+    team: data
+spec:
+  selector:
+    app: batch-job
+  ports:
+    - port: 6379
+      targetPort: 6379
+  type: ClusterIP

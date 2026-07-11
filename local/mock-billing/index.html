@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mock Cloud Billing API</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; padding: 2rem; }
+  .container { max-width: 720px; margin: 0 auto; }
+
+  .header { margin-bottom: 2rem; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; background: #dcfce7; color: #166534; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; margin-bottom: 1rem; }
+  .badge-dot { width: 6px; height: 6px; background: #16a34a; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .subtitle { font-size: 14px; color: #666; }
+
+  .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+  .method { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 5px; }
+  .get { background: #dbeafe; color: #1d4ed8; }
+  .card-body { padding: 16px 18px; }
+
+  .endpoint { font-size: 13px; font-family: 'Courier New', monospace; background: #f8f8f8; border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; color: #1a1a1a; }
+  .endpoint span { color: #666; }
+
+  .desc { font-size: 13px; color: #555; margin-bottom: 14px; line-height: 1.5; }
+
+  pre { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 14px 16px; font-size: 12px; overflow-x: auto; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .k { color: #89b4fa; }
+  .s { color: #a6e3a1; }
+  .n { color: #fab387; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1rem; }
+  .stat { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 14px 16px; text-align: center; }
+  .stat-val { font-size: 20px; font-weight: 600; color: #1a1a1a; }
+  .stat-label { font-size: 11px; color: #888; margin-top: 2px; }
+
+  .try-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 7px 14px; border-radius: 6px; border: 1px solid #d1d5db; background: #f9fafb; color: #374151; cursor: pointer; text-decoration: none; }
+  .try-btn:hover { background: #f0f0f0; }
+
+  .result { margin-top: 12px; display: none; }
+  .result.visible { display: block; }
+  .result-label { font-size: 11px; font-weight: 600; color: #16a34a; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .result-error { color: #dc2626; font-size: 12px; }
+
+  .footer { margin-top: 2rem; font-size: 12px; color: #aaa; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="badge"><span class="badge-dot"></span> Running on port 9091</div>
+    <h1>Mock Cloud Billing API</h1>
+    <p class="subtitle">Local stub for AWS Cost Explorer — used by the FinOps platform for testing without real cloud credentials.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-val">$124.58</div>
+      <div class="stat-label">Total mock spend</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">2</div>
+      <div class="stat-label">Teams tracked</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">7d</div>
+      <div class="stat-label">Report window</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Health check</span>
+      <span class="method get">GET</span>
+    </div>
+    <div class="card-body">
+      <div class="endpoint"><span>http://localhost:9091</span>/health</div>
+      <p class="desc">Returns service status. Called by Docker Compose healthcheck before the report runner starts.</p>
+      <pre>{ <span class="k">"status"</span>: <span class="s">"ok"</span> }</pre>
+      <br>
+      <button class="try-btn" onclick="tryEndpoint('/health', 'health-result')">↗ Try it</button>
+      <div class="result" id="health-result"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Billing costs</span>
+      <span class="method get">GET</span>
+    </div>
+    <div class="card-body">
+      <div class="endpoint"><span>http://localhost:9091</span>/billing/costs</div>
+      <p class="desc">Mimics AWS Cost Explorer response. Returns weekly spend grouped by <code>team</code> tag — frontend ($71.40) and data ($53.18).</p>
+      <pre>{
+  <span class="k">"ResultsByTime"</span>: [{
+    <span class="k">"TimePeriod"</span>: { <span class="k">"Start"</span>: <span class="s">"2026-07-04"</span>, <span class="k">"End"</span>: <span class="s">"2026-07-11"</span> },
+    <span class="k">"Total"</span>: { <span class="k">"UnblendedCost"</span>: { <span class="k">"Amount"</span>: <span class="n">"124.58"</span>, <span class="k">"Unit"</span>: <span class="s">"USD"</span> }},
+    <span class="k">"Groups"</span>: [
+      { <span class="k">"Keys"</span>: [<span class="s">"team$frontend"</span>], <span class="k">"Amount"</span>: <span class="n">"71.40"</span> },
+      { <span class="k">"Keys"</span>: [<span class="s">"team$data"</span>],     <span class="k">"Amount"</span>: <span class="n">"53.18"</span> }
+    ]
+  }]
+}</pre>
+      <br>
+      <button class="try-btn" onclick="tryEndpoint('/billing/costs', 'billing-result')">↗ Try it</button>
+      <div class="result" id="billing-result"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    FinOps Platform · Mock Billing Service · For local testing only — not a real AWS endpoint
+  </div>
+
+</div>
+
+<script>
+async function tryEndpoint(path, resultId) {
+  const el = document.getElementById(resultId);
+  el.classList.add('visible');
+  el.innerHTML = '<div class="result-label">Fetching…</div>';
+  try {
+    const res = await fetch(path);
+    const text = await res.text();
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    el.innerHTML = '<div class="result-label">Response (' + res.status + ')</div><pre>' +
+      pretty.replace(/</g, '&lt;') + '</pre>';
+  } catch (err) {
+    el.innerHTML = '<div class="result-error">Request failed: ' + err.message +
+      '. Make sure this page is being served by server.py on :9091 (not a static file server).</div>';
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goldilocks-controller
+  namespace: goldilocks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goldilocks-controller
+  template:
+    metadata:
+      labels:
+        app: goldilocks-controller
+    spec:
+      nodeSelector:
+        lifecycle: on-demand
+      serviceAccountName: goldilocks
+      containers:
+        - name: controller
+          image: us-docker.pkg.dev/fairwinds-ops/oss/goldilocks:v4.15.1
+          command: ["/goldilocks"]
+          args: ["controller"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goldilocks-dashboard
+  namespace: goldilocks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goldilocks-dashboard
+  template:
+    metadata:
+      labels:
+        app: goldilocks-dashboard
+    spec:
+      nodeSelector:
+        lifecycle: on-demand
+      serviceAccountName: goldilocks
+      containers:
+        - name: dashboard
+          image: us-docker.pkg.dev/fairwinds-ops/oss/goldilocks:v4.15.1
+          command: ["/goldilocks"]
+          args: ["dashboard"]
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: goldilocks-dashboard
+  namespace: goldilocks
+spec:
+  selector:
+    app: goldilocks-dashboard
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: goldilocks
+  namespace: goldilocks
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: goldilocks
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources: ["verticalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: goldilocks
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: goldilocks
+subjects:
+  - kind: ServiceAccount
+    name: goldilocks
+    namespace: goldilocks

@@ -1,0 +1,53 @@
+name: finops-platform
+description: Kubernetes FinOps platform for cloud cost optimization using Kubecost, Terraform, Goldilocks, and cost-aware autoscaling.
+setup:
+  steps:
+    - name: init-terraform
+      run: terraform -chdir=terraform init
+    - name: apply-terraform
+      run: terraform -chdir=terraform apply -auto-approve
+    - name: configure-kubectl
+      run: aws eks update-kubeconfig --name ${CLUSTER_NAME} --region ${AWS_REGION}
+    - name: create-namespaces
+      run: kubectl apply -f kubernetes/namespaces.yaml
+    - name: deploy-observability
+      run: |
+        kubectl apply -f kubernetes/observability/prometheus.yaml
+        kubectl create secret generic grafana-admin -n monitoring \
+          --from-literal=password="${GRAFANA_ADMIN_PASSWORD}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+        kubectl apply -f kubernetes/observability/grafana.yaml
+    - name: deploy-kubecost
+      run: |
+        helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+        helm repo update
+        KUBECOST_ROLE_ARN=$(terraform -chdir=terraform output -raw kubecost_iam_role_arn)
+        BILLING_BUCKET=$(terraform -chdir=terraform output -raw billing_report_bucket_name)
+        helm upgrade --install kubecost kubecost/cost-analyzer \
+          --namespace kubecost \
+          --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="${KUBECOST_ROLE_ARN}" \
+          --set kubecostProductConfigs.athenaBucketName="s3://${BILLING_BUCKET}" \
+          -f kubernetes/kubecost/values.yaml
+    - name: install-vpa-controller
+      run: |
+        git clone --depth 50 https://github.com/kubernetes/autoscaler.git /tmp/autoscaler
+        cd /tmp/autoscaler && git fetch --tags
+        cd vertical-pod-autoscaler && ./hack/vpa-up.sh
+    - name: deploy-vpa
+      run: kubectl apply -f kubernetes/rightsizing/vpa-policies.yaml
+    - name: deploy-goldilocks
+      run: kubectl apply -f kubernetes/rightsizing/goldilocks.yaml
+    - name: deploy-cluster-autoscaler
+      run: |
+        CA_ROLE_ARN=$(terraform -chdir=terraform output -raw cluster_autoscaler_iam_role_arn)
+        sed "s|\${CLUSTER_AUTOSCALER_ROLE_ARN}|${CA_ROLE_ARN}|" \
+          kubernetes/autoscaling/cluster-autoscaler-values.yaml | kubectl apply -f -
+    - name: deploy-workloads
+      run: |
+        kubectl apply -f kubernetes/workloads/web-app.yaml
+        kubectl apply -f kubernetes/workloads/batch-job.yaml
+verify:
+  steps:
+    - name: run-verification-script
+      run: bash scripts/verify.sh
+  expected_exit_code: 0
